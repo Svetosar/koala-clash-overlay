@@ -1,0 +1,57 @@
+name: Update ebuild
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Force specific version (e.g. 1.4.0). Leave empty for latest'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  check-update:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+      needs_update: ${{ steps.check.outputs.needs_update }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check for new version
+        id: check
+        run: |
+          chmod +x scripts/check-update.sh
+          scripts/check-update.sh
+          echo "version=$LATEST" >> $GITHUB_OUTPUT
+          echo "needs_update=$NEEDS_UPDATE" >> $GITHUB_OUTPUT
+        env:
+          LATEST: ${{ inputs.version || '' }}
+          NEEDS_UPDATE: ${{ inputs.version && 'true' || '' }}
+
+  bump-version:
+    needs: check-update
+    if: ${{ needs.check-update.outputs.needs_update == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Bump ebuild version
+        run: |
+          chmod +x scripts/bump-version.sh
+          scripts/bump-version.sh
+        env:
+          VERSION: ${{ needs.check-update.outputs.version }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Commit and push
+        run: |
+          git config user.name "koala-clash-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add -A
+          VERSION="${{ needs.check-update.outputs.version }}"
+          git commit -m "bump: koala-clash $VERSION" || echo "Nothing to commit"
+          git push
