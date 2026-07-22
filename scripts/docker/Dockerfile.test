@@ -1,0 +1,21 @@
+FROM gentoo/stage3:latest
+
+WORKDIR /overlay
+
+RUN emerge-webrsync
+
+COPY . .
+
+RUN mkdir -p /etc/portage/repos.conf && \
+    echo "[koala-clash-overlay]
+location = /var/db/repos/koala-clash-overlay
+masters = gentoo
+auto-sync = no" > /etc/portage/repos.conf/koala-clash-overlay.conf
+
+RUN mkdir -p /etc/portage/package.accept_keywords && \
+    echo "net-proxy/koala-clash ~amd64" > /etc/portage/package.accept_keywords/koala-clash
+
+RUN mkdir -p /etc/portage/package.license && \
+    echo "net-proxy/koala-clash GPL-3" > /etc/portage/package.license/koala-clash
+
+RUN emerge -p net-proxy/koala-clash

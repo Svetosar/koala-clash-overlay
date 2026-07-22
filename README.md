@@ -53,8 +53,8 @@ This repository has a [GitHub Actions workflow](.github/workflows/update.yml) th
 After that, running `emerge --sync` on your Gentoo machine will pull the updated ebuild.
 You can also manually trigger the workflow via Actions → Update ebuild → Run workflow.
 
-Unlike Gentoo CI, this ebuild uses `~amd64` keyword — meaning it's available for testing on
-AMD64 systems. If you want to mask testing packages globally, add to `/etc/portage/package.accept_keywords/koala-clash`:
+The ebuild uses `~amd64` keyword (testing). If your `ACCEPT_KEYWORDS` does not include
+`~amd64`, add to `/etc/portage/package.accept_keywords/koala-clash`:
 ```
 net-proxy/koala-clash ~amd64
 ```
@@ -79,6 +79,39 @@ emerge -av dev-libs/libayatana-appindicator
 | `configure tun interface: operation not permitted` | Check SUID on mihomo: `ls -la /opt/Koala.Clash/resources/sidecar/mihomo` |
 | `spawn sparkle-service EACCES` | Check +x on sparkle-service: `ls -la /opt/Koala.Clash/resources/files/sparkle-service` |
 | systemd D-Bus warnings | Harmless on OpenRC, Electron app only logs them, no effect on functionality |
+
+### How to rollback
+
+If an update breaks your setup, downgrade to a previous version:
+
+```bash
+# 1. Find available ebuilds in the overlay
+ls /var/db/repos/koala-clash-overlay/net-proxy/koala-clash/
+
+# 2. Emerge a specific version
+emerge -av =net-proxy/koala-clash-1.3.1
+```
+
+The overlay keeps all previous ebuilds — nothing is ever deleted.
+
+### Development / CI
+
+The overlay has automated CI pipeline (GitHub Actions):
+
+```
+Schedule (daily) ─→ check-update ─→ test-ebuild ─→ docker-test ─→ PR created
+Manual dispatch                                                  merge ↓ main
+```
+
+Tests:
+- `test-ebuild.sh` — validates ebuild syntax, required fields, KEYWORDS, SUID bits
+- `test-manifest.sh` — checks Manifest hashes (SHA256/BLAKE2B/SHA512)
+- `test-docker.sh` — builds `gentoo/stage3` image and runs `emerge -p` to verify resolution
+
+All updates go through a pull request for review before merging to `main`.
+To trigger manually: Actions → Update ebuild → Run workflow → optionally set version.
+
+[![Update ebuild](https://github.com/Svetosar/koala-clash-overlay/actions/workflows/update.yml/badge.svg)](https://github.com/Svetosar/koala-clash-overlay/actions/workflows/update.yml)
 
 ### Upstream
 
@@ -140,6 +173,26 @@ ebuild использует ключевое слово `~amd64` (тестиро
 ```
 net-proxy/koala-clash ~amd64
 ```
+
+### Откат версии
+
+```bash
+# Список доступных ebuild
+ls /var/db/repos/koala-clash-overlay/net-proxy/koala-clash/
+
+# Установка конкретной версии
+emerge -av =net-proxy/koala-clash-1.3.1
+```
+
+Все предыдущие версии сохраняются в оверлее.
+
+### CI/CD пайплайн
+
+```
+Расписание → проверка → тесты → Docker → создаётся PR → merge в main
+```
+
+Обновления проходят через pull request — владелец проверяет и merge'ит.
 
 ### После установки
 

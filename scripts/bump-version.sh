@@ -17,11 +17,23 @@ URL="https://github.com/$REPO/releases/download/v${VERSION}/${ARCHIVE}"
 
 cd "$EBUILD_DIR"
 
-OLD_EBUILD=$(ls koala-clash-*.ebuild | head -1)
+OLD_EBUILD=$(ls koala-clash-*.ebuild | sort -V | tail -1)
+
+if [ -f "koala-clash-${VERSION}.ebuild" ]; then
+  echo "WARNING: koala-clash-${VERSION}.ebuild already exists, overwriting"
+fi
 
 # скачать архив
 echo "Downloading $URL"
-curl -sLO "$URL" || { echo "Download failed"; exit 1; }
+AUTH=""
+if [ -n "$GH_TOKEN" ]; then
+  AUTH="Authorization: Bearer $GH_TOKEN"
+fi
+if [ -n "$AUTH" ]; then
+  curl -sLO -H "$AUTH" "$URL" || { echo "Download failed"; exit 1; }
+else
+  curl -sLO "$URL" || { echo "Download failed"; exit 1; }
+fi
 
 # посчитать хеши
 SIZE=$(stat -c%s "$ARCHIVE")
