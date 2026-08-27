@@ -7,10 +7,7 @@ RUN emerge-webrsync
 COPY . .
 
 RUN mkdir -p /etc/portage/repos.conf && \
-    echo "[koala-clash-overlay]
-location = /var/db/repos/koala-clash-overlay
-masters = gentoo
-auto-sync = no" > /etc/portage/repos.conf/koala-clash-overlay.conf
+    echo -e "[koala-clash-overlay]\nlocation = /var/db/repos/koala-clash-overlay\nmasters = gentoo\nauto-sync = no" > /etc/portage/repos.conf/koala-clash-overlay.conf
 
 RUN mkdir -p /etc/portage/package.accept_keywords && \
     echo "net-proxy/koala-clash ~amd64" > /etc/portage/package.accept_keywords/koala-clash
