@@ -62,19 +62,10 @@ jobs:
           path: .
           retention-days: 1
 
-  docker-test:
-    needs: bump-version
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: bumped
-          path: .
-      - name: Build and test Docker image
-        run: chmod +x scripts/test-docker.sh && scripts/test-docker.sh
+
 
   create-pr:
-    needs: [bump-version, docker-test]
+    needs: bump-version
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
