@@ -65,8 +65,14 @@ jobs:
 
           if gh pr list --head "$BR" --json number -q 'length' | grep -q '^1$'; then
             echo "PR for ${BR} already exists"
+          elif gh pr create --base main --head "$BR" \
+            --title "koala-clash: bump to ${VERSION}" \
+            --body-file "$PR_BODY"; then
+            echo "PR created"
           else
-            gh pr create --base main --head "$BR" \
-              --title "koala-clash: bump to ${VERSION}" \
-              --body-file "$PR_BODY"
+            echo "::warning::PR creation failed. Branch bump/${VERSION} is pushed."
+            echo "Open it manually: https://github.com/Svetosar/koala-clash-overlay/pull/new/${BR}"
+            echo "TIP: enable Settings -> Actions -> General -> Workflow permissions ->"
+            echo "     'Allow GitHub Actions to create and approve pull requests'."
+            exit 1
           fi
