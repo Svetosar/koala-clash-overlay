@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Force specific version (e.g. 1.4.0). Leave empty for latest'
+        description: 'Force a specific version (e.g. 1.4.1). Empty = latest'
         required: false
         type: string
 
@@ -14,89 +14,55 @@ permissions:
   contents: write
   pull-requests: write
 
+concurrency:
+  group: koala-clash-update
+  cancel-in-progress: false
+
 jobs:
-  check-update:
+  release:
     runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.check.outputs.version }}
-      needs_update: ${{ steps.check.outputs.needs_update }}
     steps:
       - uses: actions/checkout@v4
-      - name: Check for new version
-        id: check
-        run: scripts/check-update.sh
+
+      - name: Run release pipeline
+        id: release
         env:
           LATEST: ${{ inputs.version || '' }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash scripts/release.sh
 
-  test-ebuild:
-    needs: check-update
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Validate ebuild
-        run: chmod +x scripts/test-ebuild.sh && scripts/test-ebuild.sh
+      - name: No update required
+        if: steps.release.outputs.changed == 'false'
+        run: echo "no update needed (latest=$(echo '${{ steps.release.outputs.version }}'))"
 
-  test-manifest:
-    needs: check-update
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Validate manifest
-        run: chmod +x scripts/test-manifest.sh && scripts/test-manifest.sh
-
-  bump-version:
-    needs: [check-update, test-ebuild, test-manifest]
-    if: ${{ needs.check-update.outputs.needs_update == 'true' }}
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Bump ebuild version
-        run: chmod +x scripts/bump-version.sh && scripts/bump-version.sh
+      - name: Open / refresh bump PR
+        if: steps.release.outputs.changed == 'true'
         env:
-          VERSION: ${{ needs.check-update.outputs.version }}
+          VERSION: ${{ steps.release.outputs.version }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - uses: actions/upload-artifact@v4
-        with:
-          name: bumped
-          path: .
-          retention-days: 1
-
-
-
-  create-pr:
-    needs: bump-version
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          name: bumped
-          path: .
-      - name: Create pull request
         run: |
-          VERSION="${{ needs.check-update.outputs.version }}"
-          BRANCH="bump/v${VERSION}"
-
+          set -euo pipefail
+          BR="bump/${VERSION:?}"
           git config user.name "koala-clash-bot"
-          git config user.email "bot@users.noreply.github.com"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git checkout -b "$BRANCH"
-          git add -A
-          git commit -m "bump: koala-clash ${VERSION}" || echo "Nothing to commit"
-          git push origin "$BRANCH"
-
-          PR_EXISTS=$(gh pr list --head "$BRANCH" --json number --jq 'length' 2>/dev/null || echo 0)
-          if [ "$PR_EXISTS" -gt 0 ]; then
-            echo "PR already exists for $BRANCH, skipping"
-            exit 0
+          git checkout -B "$BR"
+          git add net-proxy/
+          if git diff --cached --quiet; then
+            echo "no changes to commit (PR branch already has the bump)"
+          else
+            git commit -m "koala-clash: bump to ${VERSION}"
           fi
+          git push -f origin "$BR"
 
-          gh pr create \
-            --title "bump: koala-clash ${VERSION}" \
-            --body "Automated bump to version ${VERSION}" \
-            --base main \
-            --head "$BRANCH" \
-            --label automated
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          if gh pr list --head "$BR" --json number -q 'length' | grep -q '^1$'; then
+            echo "PR for ${BR} already exists"
+          else
+            gh pr create --base main --head "$BR" \
+              --title "koala-clash: bump to ${VERSION}" \
+              --body "Automated bump of \`net-proxy/koala-clash\` to **${VERSION}**.
+
+Generated from the [latest upstream release](https://github.com/coolcoala/koala-clash/releases/tag/${VERSION}).
+
+The validate workflow runs syntax, Manifest and Gentoo-container smoke checks before merge."
+          fi

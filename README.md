@@ -45,12 +45,20 @@ emerge -av net-proxy/koala-clash
 
 ### How auto-update works
 
-This repository has a [GitHub Actions workflow](.github/workflows/update.yml) that:
-1. Checks for new Koala Clash releases every day at 6:00 UTC
-2. If a new version is found, downloads the archive, calculates SHA256/BLAKE2B/SHA512
-3. Creates a new ebuild, generates Manifest, commits and pushes back to this repo
+This repository has two [GitHub Actions](.github/workflows/) workflows:
 
-After that, running `emerge --sync` on your Gentoo machine will pull the updated ebuild.
+- **update.yml** — daily at 6:00 UTC (and manually via *Actions → Update ebuild → Run workflow*):
+  1. Resolves the latest upstream stable release from the GitHub API (tags have no `v` prefix)
+  2. Downloads `Koala.Clash_x64.pkg.tar.xz`, verifies its internal layout (sidecar kernels, chrome-sandbox, .desktop, …)
+  3. Copies the newest ebuild as template, regenerates `Manifest` for **all** files (DIST + every ebuild + MISC metadata.xml)
+  4. Self-checks ebuild and Manifest, then opens a pull request on branch `bump/<version>`
+  5. Merging is done manually after review
+- **validate.yml** — runs on every pull request touching `net-proxy/`, `scripts/` or workflows:
+  - ebuild syntax + required fields + SUID bits (`test-ebuild.sh`)
+  - Manifest structure and hashes (`test-manifest.sh`)
+  - **container smoke** (`scripts/smoke.sh`): fetches the distfile, re-generates the Manifest and unpacks the ebuild inside a real `gentoo/portage` container — proving the tarball opens, hashes match, and phases run
+
+After a merge, just run `emerge --sync` on your Gentoo machine to get the updated ebuild.
 You can also manually trigger the workflow via Actions → Update ebuild → Run workflow.
 
 The ebuild uses `~amd64` keyword (testing). If your `ACCEPT_KEYWORDS` does not include
@@ -99,14 +107,22 @@ The overlay keeps all previous ebuilds — nothing is ever deleted.
 The overlay has automated CI pipeline (GitHub Actions):
 
 ```
-Schedule (daily) ─→ check-update ─→ test-ebuild ─→ docker-test ─→ PR created
-Manual dispatch                                                  merge ↓ main
+Schedule (daily 6:00 UTC) / manual dispatch
+        │
+        ▼
+  release.sh  (API → download → layout check → ebuild → Manifest)
+        │
+        ▼
+  PR "bump/<version>"  ──►  validate.yml (lint + container smoke)
+        │
+        ▼
+  manual merge to main  ──►  emerge --sync on users' machines
 ```
 
 Tests:
 - `test-ebuild.sh` — validates ebuild syntax, required fields, KEYWORDS, SUID bits
-- `test-manifest.sh` — checks Manifest hashes (SHA256/BLAKE2B/SHA512)
-- `test-docker.sh` — builds `gentoo/stage3` image and runs `emerge -p` to verify resolution
+- `test-manifest.sh` — checks Manifest: DIST hashes (SHA256/BLAKE2B/SHA512), every ebuild present, `MISC metadata.xml`, no stale entries
+- `smoke.sh` — builds the ebuild in a `gentoo/portage` container (`fetch` + `manifest` + `prepare`)
 
 All updates go through a pull request for review before merging to `main`.
 To trigger manually: Actions → Update ebuild → Run workflow → optionally set version.
@@ -160,13 +176,20 @@ emerge -av net-proxy/koala-clash
 
 ### Как работает авто-обновление
 
-В этом репозитории настроен [GitHub Actions](.github/workflows/update.yml):
-1. Каждый день в 6:00 UTC проверяет выход новых версий Koala Clash
-2. Если есть новая версия — скачивает архив, считает SHA256/BLAKE2B/SHA512
-3. Создаёт новый ebuild, генерирует Manifest, коммитит и пушит обратно
+В репозитории два [GitHub Actions](.github/workflows/) воркфлоу:
 
-После этого на вашей Gentoo машине достаточно выполнить `emerge --sync`, чтобы получить
-обновлённый ebuild. Также есть возможность запустить вручную: Actions → Update ebuild → Run workflow.
+- **update.yml** — каждый день в 6:00 UTC (и вручную: Actions → Update ebuild → Run workflow):
+  1. берёт последний стабильный релиз из GitHub API (в тегах апстрима нет префикса `v`)
+  2. скачивает `Koala.Clash_x64.pkg.tar.xz`, проверяет внутреннюю раскладку (sidecar-ядра, chrome-sandbox, .desktop, …)
+  3. копирует последний ebuild как шаблон, пересобирает Manifest для **всех** файлов (DIST + каждый ebuild + MISC metadata.xml)
+  4. самопроверяет ebuild и Manifest, затем открывает pull request на ветке `bump/<версия>`
+  5. мержится вручную после ревью
+- **validate.yml** — на каждый pull request, затрагивающий `net-proxy/`, `scripts/` или воркфлоу:
+  - синтаксис ebuild + обязательные поля + SUID-биты (`test-ebuild.sh`)
+  - структура и хеши Manifest (`test-manifest.sh`)
+  - **контейнерная smoke-сборка** (`scripts/smoke.sh`): скачивание дистрибутива, повторная генерация Manifest и распаковка ebuild внутри настоящего `gentoo/portage`-контейнера — доказывает, что архив открывается, хеши совпадают и фазы выполняются
+
+После мержа на машине достаточно `emerge --sync`, чтобы забрать обновлённый ebuild.
 
 ebuild использует ключевое слово `~amd64` (тестирование). Если у вас в `ACCEPT_KEYWORDS`
 нет `~amd64`, добавьте в `/etc/portage/package.accept_keywords/koala-clash`:
@@ -189,10 +212,22 @@ emerge -av =net-proxy/koala-clash-1.3.1
 ### CI/CD пайплайн
 
 ```
-Расписание → проверка → тесты → Docker → создаётся PR → merge в main
+Расписание (ежедневно 6:00 UTC) / ручной запуск
+        │
+        ▼
+  release.sh  (API → скачивание → проверка раскладки → ebuild → Manifest)
+        │
+        ▼
+  PR "bump/<версия>"  ──►  validate.yml (lint + контейнерная smoke)
+        │
+        ▼
+  ручной merge в main  ──►  emerge --sync на машинах пользователей
 ```
 
-Обновления проходят через pull request — владелец проверяет и merge'ит.
+Тесты:
+- `test-ebuild.sh` — синтаксис ebuild, обязательные поля, KEYWORDS, SUID-биты
+- `test-manifest.sh` — хеши DIST (SHA256/BLAKE2B/SHA512), наличие каждого ebuild, `MISC metadata.xml`, отсутствие битых записей
+- `smoke.sh` — сборка ebuild в `gentoo/portage`-контейнере (`fetch` + `manifest` + `prepare`)
 
 ### После установки
 

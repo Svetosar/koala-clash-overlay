@@ -31,7 +31,13 @@ for eb in "$EBUILD_DIR"/koala-clash-*.ebuild; do
   echo "OK: $name in Manifest"
 done
 
-grep -q "^MISC " "$MANIFEST" || { echo "FAIL: MISC entry missing"; exit 1; }
+for f in $(grep "^EBUILD " "$MANIFEST" | awk '{print $2}'); do
+  [ -f "$EBUILD_DIR/$f" ] || { echo "FAIL: stale EBUILD entry $f (file no longer exists)"; exit 1; }
+done
+echo "OK: no stale EBUILD entries"
+
+[ -f "$EBUILD_DIR/metadata.xml" ] || { echo "FAIL: metadata.xml missing"; exit 1; }
+grep -q "^MISC metadata.xml " "$MANIFEST" || { echo "FAIL: MISC entry must point to metadata.xml (not an ebuild)"; exit 1; }
 echo "OK: MISC metadata.xml in Manifest"
 
 echo "=== MANIFEST VALID ==="

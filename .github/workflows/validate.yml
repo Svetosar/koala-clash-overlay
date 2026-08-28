@@ -1,0 +1,31 @@
+name: Validate ebuild
+
+on:
+  pull_request:
+    paths:
+      - 'net-proxy/**'
+      - 'scripts/**'
+      - '.github/workflows/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Shell syntax
+        run: bash -n scripts/release.sh scripts/smoke.sh scripts/check-update.sh scripts/test-ebuild.sh scripts/test-manifest.sh
+      - name: Ebuild checks
+        run: bash scripts/test-ebuild.sh
+      - name: Manifest checks
+        run: bash scripts/test-manifest.sh
+
+  container-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build ebuild in Gentoo container
+        run: bash scripts/smoke.sh
