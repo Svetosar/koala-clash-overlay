@@ -33,7 +33,7 @@ jobs:
 
       - name: No update required
         if: steps.release.outputs.changed == 'false'
-        run: echo "no update needed (latest=$(echo '${{ steps.release.outputs.version }}'))"
+        run: echo "no update needed (latest=${{ steps.release.outputs.version }})"
 
       - name: Open / refresh bump PR
         if: steps.release.outputs.changed == 'true'
@@ -45,7 +45,6 @@ jobs:
           BR="bump/${VERSION:?}"
           git config user.name "koala-clash-bot"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
           git checkout -B "$BR"
           git add net-proxy/
           if git diff --cached --quiet; then
@@ -55,14 +54,19 @@ jobs:
           fi
           git push -f origin "$BR"
 
+          PR_BODY="$RUNNER_TEMP/pr-body.md"
+          printf '%s\n' \
+            "Automated bump of net-proxy/koala-clash to **${VERSION}**." \
+            "" \
+            "Generated from the [latest upstream release](https://github.com/coolcoala/koala-clash/releases/tag/${VERSION})." \
+            "" \
+            "The validate workflow runs syntax, Manifest and Gentoo-container smoke checks before merge." \
+            > "$PR_BODY"
+
           if gh pr list --head "$BR" --json number -q 'length' | grep -q '^1$'; then
             echo "PR for ${BR} already exists"
           else
             gh pr create --base main --head "$BR" \
               --title "koala-clash: bump to ${VERSION}" \
-              --body "Automated bump of \`net-proxy/koala-clash\` to **${VERSION}**.
-
-Generated from the [latest upstream release](https://github.com/coolcoala/koala-clash/releases/tag/${VERSION}).
-
-The validate workflow runs syntax, Manifest and Gentoo-container smoke checks before merge."
+              --body-file "$PR_BODY"
           fi
